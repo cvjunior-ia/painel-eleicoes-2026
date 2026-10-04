@@ -22,6 +22,11 @@ CANDIDATOS_ZIP_URL = (
     "consulta_cand/consulta_cand_2026.zip"
 )
 
+ELEITORADO_ZIP_URL = (
+    "https://cdn.tse.jus.br/estatistica/sead/odsele/"
+    "perfil_eleitorado/perfil_eleitorado_2026.zip"
+)
+
 UFS = [
     "AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG",
     "PA","PB","PR","PE","PI","RJ","RN","RS","RO","RR","SC","SP","SE","TO"
@@ -474,6 +479,99 @@ def merge_registry_results(registry, results):
             .reset_index(drop=True)
     )
 
+@st.cache_data(ttl=24 * 60 * 60, show_spinner=False)
+def get_electorate_zip():
+    """Baixa o perfil oficial do eleitorado 2026 do Portal de Dados Abertos do TSE."""
+    r = http_session().get(
+        ELEITORADO_ZIP_URL,
+        headers={"Accept": "application/zip,*/*"},
+        timeout=120,
+    )
+    r.raise_for_status()
+    return r.content
+
+
+@st.cache_data(ttl=24 * 60 * 60, show_spinner=False)
+def load_top_ba_municipios(n=15):
+    """
+    Calcula os maiores colégios eleitorais da Bahia diretamente do arquivo
+    oficial Perfil do Eleitorado 2026 do TSE.
+    """
+    try:
+        raw = get_electorate_zip()
+        with zipfile.ZipFile(io.BytesIO(raw)) as zf:
+            member = next(
+                (
+                    nome for nome in zf.namelist()
+                    if nome.lower().endswith(".csv")
+                    and "perfil_eleitorado" in nome.lower()
+                ),
+                None
+            )
+            if not member:
+                return pd.DataFrame()
+
+            with zf.open(member) as fh:
+                dados = pd.read_csv(
+                    fh,
+                    sep=";",
+                    encoding="latin1",
+                    dtype=str,
+                    usecols=[
+                        "SG_UF",
+                        "CD_MUNICIPIO",
+                        "NM_MUNICIPIO",
+                        "QT_ELEITORES_PERFIL",
+                    ],
+                    low_memory=False,
+                )
+
+        dados = dados[dados["SG_UF"].astype(str).str.upper() == "BA"].copy()
+        if dados.empty:
+            return pd.DataFrame()
+
+        dados["Eleitores"] = pd.to_numeric(
+            dados["QT_ELEITORES_PERFIL"],
+            errors="coerce"
+        ).fillna(0)
+
+        agrupado = (
+            dados.groupby(
+                ["CD_MUNICIPIO", "NM_MUNICIPIO"],
+                as_index=False
+            )["Eleitores"]
+            .sum()
+            .sort_values("Eleitores", ascending=False)
+            .head(n)
+            .reset_index(drop=True)
+        )
+
+        agrupado["Código"] = (
+            pd.to_numeric(agrupado["CD_MUNICIPIO"], errors="coerce")
+              .fillna(0)
+              .astype(int)
+              .astype(str)
+              .str.zfill(5)
+        )
+        agrupado["Município"] = agrupado["NM_MUNICIPIO"].astype(str)
+        agrupado["Posição"] = range(1, len(agrupado) + 1)
+
+        return agrupado[["Posição", "Município", "Código", "Eleitores"]]
+    except Exception:
+        return pd.DataFrame()
+
+
+def top_municipal(df, n):
+    """Top N municipal apenas quando já existem votos apurados."""
+    if df is None or df.empty or int(df["Votos"].sum()) <= 0:
+        return pd.DataFrame()
+    return (
+        df.sort_values(["Votos", "% válidos"], ascending=False)
+          .head(n)
+          .reset_index(drop=True)
+    )
+
+
 def codigo_eleicao_arquivo(eleicao):
     """O TSE usa o código da eleição com 6 dígitos no nome dos arquivos."""
     return str(eleicao).zfill(6)
@@ -487,6 +585,17 @@ def url_acompanhamento(abrangencia, eleicao):
     a = abrangencia.lower()
     e = codigo_eleicao_arquivo(eleicao)
     return f"{BASE}/{eleicao}/dados/{a}/{a}-e{e}-ab.json"
+
+
+def url_resultado_municipio(uf, codigo_municipio, cargo, eleicao):
+    """
+    Resultado municipal EA20.
+    O TSE exige código do município com 5 dígitos no nome do arquivo.
+    """
+    u = uf.lower()
+    m = str(codigo_municipio).strip().zfill(5)
+    e = codigo_eleicao_arquivo(eleicao)
+    return f"{BASE}/{eleicao}/dados/{u}/{u}{m}-c{cargo}-e{e}-u.json"
 
 def safe_get(url):
     try:
@@ -720,7 +829,7 @@ with c4:
 
 st.caption(
     "O painel consulta diretamente os arquivos JSON públicos do TSE. "
-    "Atualização automática a cada 15 minutos. Versão 1.10 — lista presidencial completa e deputados pré-carregados pelo cadastro oficial do TSE."
+    "Atualização automática a cada 15 minutos. Versão 1.11 — resultados municipais das 15 maiores cidades da Bahia por eleitorado."
 )
 
 # Atualização manual com proteção contra cliques repetidos
@@ -750,6 +859,7 @@ tabs = st.tabs([
     "🏛️ Senado — 27 UFs",
     "🏢 Deputados Federais",
     "🌴 ALBA — Bahia",
+    "🏙️ 15 Maiores Cidades — BA",
     "⚙️ Diagnóstico"
 ])
 
@@ -937,6 +1047,121 @@ with tabs[3]:
         save_snapshot(df, "alba_bahia", tot)
 
 with tabs[4]:
+    st.subheader("15 maiores colégios eleitorais da Bahia")
+    st.caption(
+        "Ranking calculado pelo número de eleitores no arquivo oficial Perfil do Eleitorado 2026 do TSE. "
+        "Escolha uma cidade para ver os candidatos mais votados no município."
+    )
+
+    municipios_ba = load_top_ba_municipios(15)
+
+    if municipios_ba.empty:
+        st.warning(
+            "Não foi possível carregar o ranking municipal do eleitorado neste momento. "
+            "Tente novamente em alguns minutos."
+        )
+    else:
+        ranking_exibicao = municipios_ba[["Posição", "Município", "Eleitores"]].copy()
+        ranking_exibicao["Eleitores"] = ranking_exibicao["Eleitores"].astype(int)
+        st.dataframe(
+            ranking_exibicao,
+            use_container_width=True,
+            hide_index=True
+        )
+
+        opcoes = municipios_ba["Município"].tolist()
+        cidade_sel = st.selectbox(
+            "Selecione uma das 15 cidades",
+            opcoes,
+            index=0,
+            key="cidade_ba_top15"
+        )
+
+        cidade_row = municipios_ba[
+            municipios_ba["Município"] == cidade_sel
+        ].iloc[0]
+
+        codigo_mun = cidade_row["Código"]
+        eleitores_mun = int(cidade_row["Eleitores"])
+
+        st.markdown(f"### {cidade_sel}")
+        st.caption(
+            f"Eleitorado: {eleitores_mun:,} eleitores • código TSE do município: {codigo_mun}"
+            .replace(",", ".")
+        )
+
+        url_pres_mun = url_resultado_municipio(
+            "BA", codigo_mun, "0001", ELEICAO_FEDERAL
+        )
+        url_dfed_mun = url_resultado_municipio(
+            "BA", codigo_mun, "0006", ELEICAO_ESTADUAL
+        )
+        url_dest_mun = url_resultado_municipio(
+            "BA", codigo_mun, "0007", ELEICAO_ESTADUAL
+        )
+
+        pres_data, pres_err = safe_get(url_pres_mun)
+        dfed_data, dfed_err = safe_get(url_dfed_mun)
+        dest_data, dest_err = safe_get(url_dest_mun)
+
+        diagnostico.append((f"Presidente {cidade_sel}", url_pres_mun, pres_err))
+        diagnostico.append((f"Deputado Federal {cidade_sel}", url_dfed_mun, dfed_err))
+        diagnostico.append((f"Deputado Estadual {cidade_sel}", url_dest_mun, dest_err))
+
+        pres_df = top_municipal(parse_candidates(pres_data), 3)
+        dfed_df = top_municipal(parse_candidates(dfed_data), 10)
+        dest_df = top_municipal(parse_candidates(dest_data), 10)
+
+        t_pres, t_dfed, t_dest = st.tabs([
+            "🇧🇷 Presidente — Top 3",
+            "🏢 Federal — Top 10",
+            "🌴 Estadual — Top 10",
+        ])
+
+        with t_pres:
+            if pres_df.empty:
+                st.info("Aguardando votos totalizados para Presidente neste município.")
+            else:
+                pres_show = pres_df[
+                    ["Nome", "Número", "Partido/Coligação", "Votos", "% válidos"]
+                ].copy()
+                pres_show.insert(0, "Posição", range(1, len(pres_show) + 1))
+                st.dataframe(
+                    pres_show,
+                    use_container_width=True,
+                    hide_index=True
+                )
+
+        with t_dfed:
+            if dfed_df.empty:
+                st.info("Aguardando votos totalizados para Deputado Federal neste município.")
+            else:
+                dfed_show = dfed_df[
+                    ["Nome", "Número", "Partido/Coligação", "Votos", "% válidos", "Status TSE"]
+                ].copy()
+                dfed_show.insert(0, "Posição", range(1, len(dfed_show) + 1))
+                st.dataframe(
+                    dfed_show,
+                    use_container_width=True,
+                    hide_index=True
+                )
+
+        with t_dest:
+            if dest_df.empty:
+                st.info("Aguardando votos totalizados para Deputado Estadual neste município.")
+            else:
+                dest_show = dest_df[
+                    ["Nome", "Número", "Partido/Coligação", "Votos", "% válidos", "Status TSE"]
+                ].copy()
+                dest_show.insert(0, "Posição", range(1, len(dest_show) + 1))
+                st.dataframe(
+                    dest_show,
+                    use_container_width=True,
+                    hide_index=True
+                )
+
+
+with tabs[5]:
     st.subheader("Diagnóstico dos endpoints")
     st.write(
         "Use esta aba se algum quadro ficar vazio. Antes do início oficial da divulgação, "
