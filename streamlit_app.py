@@ -75,6 +75,69 @@ st.markdown(
             font-size: 0.78rem !important;
         }
     }
+
+    .motocred-ad {
+        display: block;
+        text-decoration: none !important;
+        border-radius: 14px;
+        padding: 18px 22px;
+        margin: 8px 0 16px 0;
+        background: linear-gradient(135deg, #d90000 0%, #a80000 100%);
+        color: white !important;
+        box-shadow: 0 4px 14px rgba(0,0,0,0.12);
+    }
+    .motocred-ad:hover {
+        filter: brightness(1.03);
+        transform: translateY(-1px);
+        transition: 0.15s ease;
+    }
+    .motocred-ad .ad-label {
+        font-size: 0.72rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        opacity: 0.85;
+        margin-bottom: 4px;
+    }
+    .motocred-ad .brand {
+        font-size: 1.55rem;
+        font-weight: 800;
+        line-height: 1.05;
+        margin-bottom: 4px;
+    }
+    .motocred-ad .copy {
+        font-size: 0.95rem;
+        line-height: 1.3;
+        margin-bottom: 10px;
+        opacity: 0.98;
+    }
+    .motocred-ad .cta {
+        display: inline-block;
+        background: white;
+        color: #a80000 !important;
+        font-weight: 700;
+        padding: 7px 12px;
+        border-radius: 8px;
+        font-size: 0.88rem;
+    }
+    .motocred-disclaimer {
+        font-size: 0.72rem;
+        opacity: 0.7;
+        margin-top: -10px;
+        margin-bottom: 10px;
+    }
+
+    @media (max-width: 768px) {
+        .motocred-ad {
+            padding: 14px 15px;
+            border-radius: 12px;
+        }
+        .motocred-ad .brand {
+            font-size: 1.28rem;
+        }
+        .motocred-ad .copy {
+            font-size: 0.88rem;
+        }
+    }
     </style>
     """,
     unsafe_allow_html=True,
@@ -347,6 +410,24 @@ def top_por_partido(df, n=20):
 
 st.title("🗳️ Painel Eleições 2026 — Dados oficiais do TSE")
 
+st.markdown(
+    """
+    <a class="motocred-ad"
+       href="https://motocredyamaha.com.br/"
+       target="_blank"
+       rel="noopener noreferrer">
+        <div class="ad-label">Publicidade</div>
+        <div class="brand">YAMAHA MOTOCRED</div>
+        <div class="copy">Motos Yamaha, peças, acessórios, serviços e ofertas. Conheça nossas opções e fale com a equipe Motocred.</div>
+        <span class="cta">Conheça a Yamaha Motocred →</span>
+    </a>
+    <div class="motocred-disclaimer">
+        Conteúdo comercial da Yamaha Motocred. Não possui vínculo com o TSE.
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
+
 c1, c2, c3, c4 = st.columns([1.2, 0.8, 1, 0.9])
 with c1:
     st.metric("Atualização local", datetime.now(TZ_BAHIA).strftime("%d/%m/%Y %H:%M"))
@@ -359,7 +440,7 @@ with c4:
 
 st.caption(
     "O painel consulta diretamente os arquivos JSON públicos do TSE. "
-    "Atualização automática a cada 15 minutos. Versão 1.3 — botão de atualização manual, cache compartilhado e interface móvel otimizada."
+    "Atualização automática a cada 15 minutos. Versão 1.4 — banner Yamaha Motocred, atualização manual e interface móvel otimizada."
 )
 
 # Atualização manual com proteção contra cliques repetidos
