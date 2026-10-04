@@ -457,9 +457,6 @@ def merge_registry_results(registry, results):
             stt = str(hit.get("Status TSE", "")).strip()
             if stt:
                 base.at[i, "Status TSE"] = stt
-            grp = str(hit.get("Partido/Coligação", "")).strip()
-            if grp:
-                base.at[i, "Partido/Coligação"] = grp
             matched.add((str(hit.get("Seq.", "")), str(hit.get("Número", ""))))
 
     extras = []
@@ -723,7 +720,7 @@ with c4:
 
 st.caption(
     "O painel consulta diretamente os arquivos JSON públicos do TSE. "
-    "Atualização automática a cada 15 minutos. Versão 1.9 — 12 presidenciáveis completos, cadastro oficial de deputados e top 20 por partido/federação."
+    "Atualização automática a cada 15 minutos. Versão 1.10 — lista presidencial completa e deputados pré-carregados pelo cadastro oficial do TSE."
 )
 
 # Atualização manual com proteção contra cliques repetidos
@@ -845,9 +842,7 @@ with tabs[1]:
     st.markdown(f"### Detalhe — {uf_sel}")
     data, _ = safe_get(url_resultado(uf_sel, "0005", ELEICAO_ESTADUAL))
     acomp, _ = safe_get(url_acompanhamento(uf_sel, ELEICAO_ESTADUAL))
-    resultado_df = parse_candidates(data)
-    cadastro_df = load_candidate_registry(uf_df, 6)
-    df = merge_registry_results(cadastro_df, resultado_df)
+    df = parse_candidates(data)
     tot = parse_totalizacao(data).get("percentual", 0.0)
     if tot <= 0:
         tot = parse_totalizacao(acomp).get("percentual", 0.0)
@@ -879,7 +874,9 @@ with tabs[2]:
     diagnostico.append((f"Deputado Federal {uf_df}", url_resultado(uf_df, "0006", ELEICAO_ESTADUAL), err))
     diagnostico.append((f"Acompanhamento DFed {uf_df}", url_acompanhamento(uf_df, ELEICAO_ESTADUAL), err2))
 
-    df = parse_candidates(data)
+    resultado_df = parse_candidates(data)
+    cadastro_df = load_candidate_registry(uf_df, 6)
+    df = merge_registry_results(cadastro_df, resultado_df)
     tot = parse_totalizacao(data).get("percentual", 0.0)
     if tot <= 0:
         tot = parse_totalizacao(acomp).get("percentual", 0.0)
