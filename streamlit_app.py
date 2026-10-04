@@ -5,6 +5,8 @@ from pathlib import Path
 
 import pandas as pd
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 import streamlit as st
 from streamlit_autorefresh import st_autorefresh
 
@@ -18,9 +20,12 @@ UFS = [
 ]
 
 HEADERS = {
-    "User-Agent": "Painel-Eleicoes-2026/1.0",
+    "User-Agent": "Painel-Eleicoes-2026/1.1",
     "Accept": "application/json,text/plain,*/*",
 }
+
+# Cache compartilhado entre os visitantes do mesmo processo do Streamlit.
+CACHE_TTL = 15 * 60
 
 HIST = Path("historico")
 HIST.mkdir(exist_ok=True)
@@ -31,6 +36,48 @@ st.set_page_config(
     page_title="Eleições 2026 - TSE",
     page_icon="🗳️",
     layout="wide"
+)
+
+# MOBILE RESPONSIVE
+st.markdown(
+    """
+    <style>
+    /* Mantém o painel confortável em Android e iOS */
+    @media (max-width: 768px) {
+        .block-container {
+            padding-top: 1rem !important;
+            padding-left: 0.65rem !important;
+            padding-right: 0.65rem !important;
+        }
+        h1 {
+            font-size: 1.65rem !important;
+            line-height: 1.15 !important;
+        }
+        h2 { font-size: 1.35rem !important; }
+        h3 { font-size: 1.15rem !important; }
+
+        [data-testid="stMetricValue"] {
+            font-size: 1.25rem !important;
+        }
+        [data-testid="stMetricLabel"] {
+            font-size: 0.78rem !important;
+        }
+
+        /* Tabelas continuam roláveis na horizontal em telas estreitas */
+        [data-testid="stDataFrame"] {
+            overflow-x: auto !important;
+        }
+
+        /* Abas mais compactas no celular */
+        button[data-baseweb="tab"] {
+            padding-left: 0.45rem !important;
+            padding-right: 0.45rem !important;
+            font-size: 0.78rem !important;
+        }
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
 )
 
 st_autorefresh(interval=15 * 60 * 1000, key="auto_refresh_15min")
@@ -56,9 +103,29 @@ def to_float_br(v):
     except Exception:
         return 0.0
 
-@st.cache_data(ttl=14 * 60, show_spinner=False)
+@st.cache_resource
+def http_session():
+    """Uma única sessão HTTP compartilhada entre os usuários do painel."""
+    session = requests.Session()
+    session.headers.update(HEADERS)
+    retry = Retry(
+        total=2,
+        connect=2,
+        read=2,
+        backoff_factor=0.4,
+        status_forcelist=[500, 502, 503, 504],
+        allowed_methods=frozenset(["GET"]),
+        raise_on_status=False,
+    )
+    adapter = HTTPAdapter(pool_connections=20, pool_maxsize=20, max_retries=retry)
+    session.mount("https://", adapter)
+    return session
+
+
+@st.cache_data(ttl=CACHE_TTL, show_spinner=False)
 def get_json(url):
-    r = requests.get(url, headers=HEADERS, timeout=20)
+    """Resultado fica em cache e é reutilizado por todos os visitantes."""
+    r = http_session().get(url, timeout=20)
     r.raise_for_status()
     return r.json()
 
@@ -202,14 +269,13 @@ def parse_totalizacao(data):
     return {"percentual": 0.0, "raw": data}
 
 def save_snapshot(df, nome, totalizacao=None):
-    if df.empty:
-        return
-    now = datetime.now(TZ_BAHIA).strftime("%Y-%m-%d_%H-%M-%S")
-    cp = df.copy()
-    cp.insert(0, "Atualização", datetime.now(TZ_BAHIA).strftime("%Y-%m-%d %H:%M:%S"))
-    if totalizacao is not None:
-        cp.insert(1, "Seções totalizadas (%)", totalizacao)
-    cp.to_csv(HIST / f"{nome}_{now}.csv", index=False, encoding="utf-8-sig")
+    """
+    No Community Cloud não gravamos um CSV novo a cada visita.
+    Isso reduz I/O, memória e duplicação quando muitas pessoas acessam o painel.
+    Os dados continuam sendo atualizados ao vivo pelo cache compartilhado.
+    """
+    return
+
 
 def status_senado(df, pct_totalizada):
     if df.empty:
@@ -281,17 +347,19 @@ def top_por_partido(df, n=20):
 
 st.title("🗳️ Painel Eleições 2026 — Dados oficiais do TSE")
 
-c1, c2, c3 = st.columns([1.2, 1, 1])
+c1, c2, c3, c4 = st.columns([1.2, 0.8, 1, 0.9])
 with c1:
     st.metric("Atualização local", datetime.now(TZ_BAHIA).strftime("%d/%m/%Y %H:%M"))
 with c2:
-    st.metric("Intervalo automático", "15 min")
+    st.metric("Atualização", "15 min")
 with c3:
-    st.metric("Fonte", "TSE — resultados.tse.jus.br")
+    st.metric("Fonte", "TSE oficial")
+with c4:
+    st.metric("Cache", "Compartilhado")
 
 st.caption(
     "O painel consulta diretamente os arquivos JSON públicos do TSE. "
-    "Atualização automática a cada 15 minutos. Versão 1.1 — endpoints oficiais 2026 corrigidos."
+    "Atualização automática a cada 15 minutos. Versão 1.2 — cache compartilhado e interface móvel otimizada."
 )
 
 tabs = st.tabs([
