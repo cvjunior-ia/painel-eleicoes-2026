@@ -1,4 +1,6 @@
 import time
+import io
+import zipfile
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from pathlib import Path
@@ -13,6 +15,12 @@ from streamlit_autorefresh import st_autorefresh
 BASE = "https://resultados.tse.jus.br/oficial/ele2026"
 ELEICAO_FEDERAL = "6257"
 ELEICAO_ESTADUAL = "6259"
+
+# Cadastro oficial de candidaturas (Portal de Dados Abertos do TSE)
+CANDIDATOS_ZIP_URL = (
+    "https://cdn.tse.jus.br/estatistica/sead/odsele/"
+    "consulta_cand/consulta_cand_2026.zip"
+)
 
 UFS = [
     "AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG",
@@ -305,6 +313,170 @@ def get_json(url):
     r.raise_for_status()
     return r.json()
 
+
+@st.cache_data(ttl=6 * 60 * 60, show_spinner=False)
+def get_candidate_zip():
+    """Baixa o cadastro oficial de candidatos do Portal de Dados Abertos do TSE."""
+    r = http_session().get(
+        CANDIDATOS_ZIP_URL,
+        headers={"Accept": "application/zip,*/*"},
+        timeout=90,
+    )
+    r.raise_for_status()
+    return r.content
+
+
+@st.cache_data(ttl=6 * 60 * 60, show_spinner=False)
+def load_candidate_registry(uf, cargo):
+    """
+    Retorna cadastro oficial TSE para uma UF/cargo.
+    Cargo: 1 presidente, 6 deputado federal, 7 deputado estadual.
+    """
+    try:
+        raw = get_candidate_zip()
+        with zipfile.ZipFile(io.BytesIO(raw)) as zf:
+            alvo = f"consulta_cand_2026_{uf.upper()}.csv"
+            member = next(
+                (n for n in zf.namelist() if n.endswith(alvo)),
+                None
+            )
+            if not member:
+                return pd.DataFrame()
+
+            with zf.open(member) as fh:
+                dados = pd.read_csv(
+                    fh,
+                    sep=";",
+                    encoding="latin1",
+                    dtype=str,
+                    low_memory=False,
+                )
+
+        dados = dados[dados["CD_CARGO"].astype(str) == str(cargo)].copy()
+        if dados.empty:
+            return pd.DataFrame()
+
+        def grupo(row):
+            tp = str(row.get("TP_AGREMIACAO", "")).strip().upper()
+            fed = str(row.get("NM_FEDERACAO", "")).strip()
+            if tp == "FEDERAÇÃO" and fed and fed not in {"#NULO", "nan", "None"}:
+                return fed
+            p = str(row.get("SG_PARTIDO", "")).strip()
+            return p if p not in {"", "#NULO", "nan", "None"} else "Sem identificação"
+
+        nome_urna = dados["NM_URNA_CANDIDATO"].fillna("").astype(str).str.strip()
+        nome_civil = dados["NM_CANDIDATO"].fillna("").astype(str).str.strip()
+
+        out = pd.DataFrame({
+            "Nome": nome_urna.where(nome_urna.ne(""), nome_civil),
+            "Número": dados["NR_CANDIDATO"].fillna("").astype(str),
+            "Partido/Coligação": dados.apply(grupo, axis=1),
+            "Votos": 0,
+            "% válidos": 0.0,
+            "Status TSE": "Em apuração",
+            "Seq.": dados["SQ_CANDIDATO"].fillna("").astype(str),
+        })
+
+        return (
+            out.drop_duplicates(subset=["Seq.", "Número", "Nome"])
+               .sort_values(["Partido/Coligação", "Número", "Nome"])
+               .reset_index(drop=True)
+        )
+    except Exception:
+        return pd.DataFrame()
+
+
+def president_registry():
+    """
+    Doze chapas presidenciais validadas pelo TSE para o 1º turno de 2026.
+    Mantém todos visíveis mesmo antes do primeiro boletim de votação.
+    """
+    rows = [
+        ("LULA", "13", "PT"),
+        ("FLÁVIO BOLSONARO", "22", "PL"),
+        ("RONALDO CAIADO", "55", "PSD"),
+        ("RUI COSTA PIMENTA", "29", "PCO"),
+        ("SAMARA", "80", "UP"),
+        ("ZEMA", "30", "NOVO"),
+        ("HERTZ DIAS", "16", "PSTU"),
+        ("EDMILSON COSTA", "21", "PCB"),
+        ("RENAN SANTOS", "14", "MISSÃO"),
+        ("VETERINÁRIO WILSON GRASSI", "35", "DEMOCRATA"),
+        ("CLARIANA BARÃO", "27", "DC"),
+        ("AUGUSTO CURY", "70", "AVANTE"),
+    ]
+    return pd.DataFrame([
+        {
+            "Nome": nome,
+            "Número": numero,
+            "Partido/Coligação": partido,
+            "Votos": 0,
+            "% válidos": 0.0,
+            "Status TSE": "Em apuração",
+            "Seq.": "",
+        }
+        for nome, numero, partido in rows
+    ])
+
+
+def merge_registry_results(registry, results):
+    """Mescla cadastro oficial (base) com votos/status do arquivo de resultados."""
+    if registry is None or registry.empty:
+        return results.copy() if results is not None else pd.DataFrame()
+    if results is None or results.empty:
+        return registry.copy().sort_values(["Votos", "Nome"], ascending=[False, True]).reset_index(drop=True)
+
+    base = registry.copy()
+    res = results.copy()
+
+    by_seq = {
+        str(r["Seq."]): r
+        for _, r in res.iterrows()
+        if str(r.get("Seq.", "")).strip() not in {"", "nan", "None"}
+    }
+    by_num = {
+        str(r["Número"]): r
+        for _, r in res.iterrows()
+        if str(r.get("Número", "")).strip() not in {"", "nan", "None"}
+    }
+
+    matched = set()
+    for i, row in base.iterrows():
+        hit = None
+        seq = str(row.get("Seq.", "")).strip()
+        num = str(row.get("Número", "")).strip()
+
+        if seq in by_seq:
+            hit = by_seq[seq]
+        elif num in by_num:
+            hit = by_num[num]
+
+        if hit is not None:
+            base.at[i, "Votos"] = to_int(hit.get("Votos", 0))
+            base.at[i, "% válidos"] = to_float_br(hit.get("% válidos", 0))
+            stt = str(hit.get("Status TSE", "")).strip()
+            if stt:
+                base.at[i, "Status TSE"] = stt
+            grp = str(hit.get("Partido/Coligação", "")).strip()
+            if grp:
+                base.at[i, "Partido/Coligação"] = grp
+            matched.add((str(hit.get("Seq.", "")), str(hit.get("Número", ""))))
+
+    extras = []
+    for _, row in res.iterrows():
+        key = (str(row.get("Seq.", "")), str(row.get("Número", "")))
+        if key not in matched:
+            extras.append(row.to_dict())
+
+    if extras:
+        base = pd.concat([base, pd.DataFrame(extras)], ignore_index=True)
+
+    return (
+        base.drop_duplicates(subset=["Seq.", "Número", "Nome"])
+            .sort_values(["Votos", "Nome"], ascending=[False, True])
+            .reset_index(drop=True)
+    )
+
 def codigo_eleicao_arquivo(eleicao):
     """O TSE usa o código da eleição com 6 dígitos no nome dos arquivos."""
     return str(eleicao).zfill(6)
@@ -454,60 +626,38 @@ def save_snapshot(df, nome, totalizacao=None):
 
 
 def status_senado(df, pct_totalizada):
+    """
+    Exibe somente fatos da apuração e status oficial do TSE.
+    Não faz previsão própria de eleição.
+    """
     if df.empty:
         return df
 
-    out = df.copy()
-    out["Chances/Status"] = "Em apuração"
+    out = df.copy().reset_index(drop=True)
+    out["Posição atual"] = range(1, len(out) + 1)
 
-    for i, row in out.iterrows():
-        stt = str(row["Status TSE"]).lower()
-        if any(x in stt for x in ["eleito", "eleita"]):
-            out.at[i, "Chances/Status"] = "Eleito"
-        elif any(x in stt for x in ["não eleito", "nao eleito", "suplente"]):
-            out.at[i, "Chances/Status"] = "Não eleito"
+    def oficial(stt):
+        s = str(stt).lower()
+        if "não eleito" in s or "nao eleito" in s:
+            return "Não eleito"
+        if "supl" in s:
+            return "Suplente"
+        if "eleit" in s:
+            return "Eleito"
+        return "Em apuração"
 
-    if len(out) < 3 or pct_totalizada <= 0:
-        return out
-
-    votos_apurados = int(out["Votos"].sum())
-    frac = pct_totalizada / 100.0
-    if frac <= 0:
-        return out
-
-    estimativa_total = votos_apurados / frac
-    votos_restantes_est = max(0, estimativa_total - votos_apurados)
-
-    v2 = int(out.iloc[1]["Votos"])
-    v3 = int(out.iloc[2]["Votos"])
-    vantagem = v2 - v3
-
-    for pos in [0, 1]:
-        if out.at[pos, "Chances/Status"] == "Em apuração":
-            if vantagem > votos_restantes_est:
-                out.at[pos, "Chances/Status"] = "Matematicamente eleito"
-            elif pct_totalizada >= 95 and vantagem > max(1000, 0.002 * max(v2, 1)):
-                out.at[pos, "Chances/Status"] = "Chance alta"
-            else:
-                out.at[pos, "Chances/Status"] = "Disputa acirrada"
-
-    if out.at[2, "Chances/Status"] == "Em apuração":
-        out.at[2, "Chances/Status"] = (
-            "Não eleito" if vantagem > votos_restantes_est else "Disputa acirrada"
-        )
-
-    for i in range(3, len(out)):
-        if out.at[i, "Chances/Status"] == "Em apuração":
-            out.at[i, "Chances/Status"] = "Não eleito" if pct_totalizada >= 100 else "Em apuração"
-
+    out["Situação TSE"] = out["Status TSE"].map(oficial)
     return out
+
 
 def infer_party_status(status_tse):
     s = str(status_tse).lower()
-    if "eleit" in s:
-        return "Eleito"
+    if "não eleito" in s or "nao eleito" in s:
+        return "Não eleito"
     if "supl" in s:
         return "Suplente"
+    if "eleit" in s:
+        return "Eleito"
     return "Em apuração"
 
 def top_por_partido(df, n=20):
@@ -516,8 +666,9 @@ def top_por_partido(df, n=20):
     col = "Partido/Coligação"
     grupos = {}
     for partido, g in df.groupby(col, dropna=False):
-        gg = g.sort_values("Votos", ascending=False).head(n).copy()
-        gg["Status"] = gg["Status TSE"].map(infer_party_status)
+        gg = g.sort_values(["Votos", "Nome"], ascending=[False, True]).head(n).copy()
+        gg.insert(0, "Posição no grupo", range(1, len(gg) + 1))
+        gg["Situação TSE"] = gg["Status TSE"].map(infer_party_status)
         grupos[str(partido) if str(partido) else "Sem identificação"] = gg
     return dict(sorted(grupos.items(), key=lambda kv: kv[0]))
 
@@ -572,7 +723,7 @@ with c4:
 
 st.caption(
     "O painel consulta diretamente os arquivos JSON públicos do TSE. "
-    "Atualização automática a cada 15 minutos. Versão 1.8 — banner Yamaha Motocred compacto, tipografia Yamaha-inspired e interface móvel otimizada."
+    "Atualização automática a cada 15 minutos. Versão 1.9 — 12 presidenciáveis completos, cadastro oficial de deputados e top 20 por partido/federação."
 )
 
 # Atualização manual com proteção contra cliques repetidos
@@ -628,7 +779,8 @@ with tabs[0]:
             diagnostico.append((rotulo, ures, err))
             diagnostico.append((rotulo + " acompanhamento", uac, err2))
 
-            df = parse_candidates(data)
+            resultado_df = parse_candidates(data)
+            df = merge_registry_results(president_registry(), resultado_df)
             tot = parse_totalizacao(data).get("percentual", 0.0)
             if tot <= 0:
                 tot = parse_totalizacao(acomp).get("percentual", 0.0)
@@ -640,7 +792,7 @@ with tabs[0]:
                 st.info("Resultado ainda indisponível nesse arquivo.")
             else:
                 st.dataframe(
-                    df[["Nome","Partido/Coligação","Votos","% válidos","Status TSE"]].head(10),
+                    df[["Nome","Número","Partido/Coligação","Votos","% válidos","Status TSE"]],
                     use_container_width=True,
                     hide_index=True
                 )
@@ -649,8 +801,8 @@ with tabs[0]:
 with tabs[1]:
     st.subheader("Senado — todas as UFs")
     st.caption(
-        "Duas vagas por UF. A classificação matemática é indicativa e usa "
-        "percentual totalizado + diferença entre 2º e 3º."
+        "Duas vagas por UF. O painel mostra posição atual, votos, diferença entre 2º e 3º "
+        "e somente a situação oficial informada pelo TSE."
     )
 
     uf_sel = st.selectbox("UF para detalhar", UFS, index=UFS.index("BA"))
@@ -693,7 +845,9 @@ with tabs[1]:
     st.markdown(f"### Detalhe — {uf_sel}")
     data, _ = safe_get(url_resultado(uf_sel, "0005", ELEICAO_ESTADUAL))
     acomp, _ = safe_get(url_acompanhamento(uf_sel, ELEICAO_ESTADUAL))
-    df = parse_candidates(data)
+    resultado_df = parse_candidates(data)
+    cadastro_df = load_candidate_registry(uf_df, 6)
+    df = merge_registry_results(cadastro_df, resultado_df)
     tot = parse_totalizacao(data).get("percentual", 0.0)
     if tot <= 0:
         tot = parse_totalizacao(acomp).get("percentual", 0.0)
@@ -704,7 +858,7 @@ with tabs[1]:
         st.info("Resultado do Senado ainda indisponível para essa UF.")
     else:
         st.dataframe(
-            ds[["Nome","Partido/Coligação","Votos","% válidos","Chances/Status"]],
+            ds[["Posição atual","Nome","Partido/Coligação","Votos","% válidos","Situação TSE"]],
             use_container_width=True,
             hide_index=True
         )
@@ -732,14 +886,19 @@ with tabs[2]:
 
     st.progress(min(max(tot / 100, 0.0), 1.0), text=f"Seções totalizadas: {tot:.2f}%")
 
+    st.caption(
+        "Cadastro de candidaturas: Portal de Dados Abertos do TSE. "
+        "Antes da apuração, os votos aparecem zerados; depois, permanecem apenas os 20 mais votados de cada partido/federação."
+    )
+
     if df.empty:
-        st.info("Resultado ainda indisponível.")
+        st.info("Cadastro de candidaturas temporariamente indisponível.")
     else:
         grupos = top_por_partido(df, 20)
         for partido, g in grupos.items():
             with st.expander(f"{partido} — Top {min(20, len(g))}", expanded=False):
                 st.dataframe(
-                    g[["Nome","Partido/Coligação","Votos","Status"]],
+                    g[["Posição no grupo","Nome","Número","Partido/Coligação","Votos","Situação TSE"]],
                     use_container_width=True,
                     hide_index=True
                 )
@@ -753,21 +912,28 @@ with tabs[3]:
     diagnostico.append(("ALBA", url_resultado("BA", "0007", ELEICAO_ESTADUAL), err))
     diagnostico.append(("Acompanhamento ALBA", url_acompanhamento("BA", ELEICAO_ESTADUAL), err2))
 
-    df = parse_candidates(data)
+    resultado_df = parse_candidates(data)
+    cadastro_df = load_candidate_registry("BA", 7)
+    df = merge_registry_results(cadastro_df, resultado_df)
     tot = parse_totalizacao(data).get("percentual", 0.0)
     if tot <= 0:
         tot = parse_totalizacao(acomp).get("percentual", 0.0)
 
     st.progress(min(max(tot / 100, 0.0), 1.0), text=f"Seções totalizadas: {tot:.2f}%")
 
+    st.caption(
+        "Cadastro de candidaturas: Portal de Dados Abertos do TSE. "
+        "Antes da apuração, os votos aparecem zerados; depois, permanecem apenas os 20 mais votados de cada partido/federação."
+    )
+
     if df.empty:
-        st.info("Resultado da ALBA ainda indisponível.")
+        st.info("Cadastro de candidaturas da ALBA temporariamente indisponível.")
     else:
         grupos = top_por_partido(df, 20)
         for partido, g in grupos.items():
             with st.expander(f"{partido} — Top {min(20, len(g))}", expanded=False):
                 st.dataframe(
-                    g[["Nome","Partido/Coligação","Votos","Status"]],
+                    g[["Posição no grupo","Nome","Número","Partido/Coligação","Votos","Situação TSE"]],
                     use_container_width=True,
                     hide_index=True
                 )
