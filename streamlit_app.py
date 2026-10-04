@@ -1,5 +1,6 @@
 import time
 from datetime import datetime
+from zoneinfo import ZoneInfo
 from pathlib import Path
 
 import pandas as pd
@@ -23,6 +24,8 @@ HEADERS = {
 
 HIST = Path("historico")
 HIST.mkdir(exist_ok=True)
+
+TZ_BAHIA = ZoneInfo("America/Bahia")
 
 st.set_page_config(
     page_title="Eleições 2026 - TSE",
@@ -201,9 +204,9 @@ def parse_totalizacao(data):
 def save_snapshot(df, nome, totalizacao=None):
     if df.empty:
         return
-    now = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    now = datetime.now(TZ_BAHIA).strftime("%Y-%m-%d_%H-%M-%S")
     cp = df.copy()
-    cp.insert(0, "Atualização", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+    cp.insert(0, "Atualização", datetime.now(TZ_BAHIA).strftime("%Y-%m-%d %H:%M:%S"))
     if totalizacao is not None:
         cp.insert(1, "Seções totalizadas (%)", totalizacao)
     cp.to_csv(HIST / f"{nome}_{now}.csv", index=False, encoding="utf-8-sig")
@@ -280,7 +283,7 @@ st.title("🗳️ Painel Eleições 2026 — Dados oficiais do TSE")
 
 c1, c2, c3 = st.columns([1.2, 1, 1])
 with c1:
-    st.metric("Atualização local", datetime.now().strftime("%d/%m/%Y %H:%M"))
+    st.metric("Atualização local", datetime.now(TZ_BAHIA).strftime("%d/%m/%Y %H:%M"))
 with c2:
     st.metric("Intervalo automático", "15 min")
 with c3:
