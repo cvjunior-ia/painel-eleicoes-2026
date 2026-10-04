@@ -1,5 +1,5 @@
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from pathlib import Path
 
@@ -359,8 +359,30 @@ with c4:
 
 st.caption(
     "O painel consulta diretamente os arquivos JSON públicos do TSE. "
-    "Atualização automática a cada 15 minutos. Versão 1.2 — cache compartilhado e interface móvel otimizada."
+    "Atualização automática a cada 15 minutos. Versão 1.3 — botão de atualização manual, cache compartilhado e interface móvel otimizada."
 )
+
+# Atualização manual com proteção contra cliques repetidos
+if "ultima_atualizacao_manual" not in st.session_state:
+    st.session_state.ultima_atualizacao_manual = None
+
+col_refresh, col_status = st.columns([1, 3])
+
+with col_refresh:
+    if st.button("🔄 Atualizar agora", use_container_width=True):
+        agora = datetime.now(TZ_BAHIA)
+        ultima = st.session_state.ultima_atualizacao_manual
+
+        if ultima is None or (agora - ultima) >= timedelta(seconds=30):
+            st.session_state.ultima_atualizacao_manual = agora
+            st.cache_data.clear()
+            st.rerun()
+        else:
+            faltam = 30 - int((agora - ultima).total_seconds())
+            st.warning(f"Aguarde {faltam}s para atualizar novamente.")
+
+with col_status:
+    st.caption("Atualização manual consulta novamente os dados do TSE e renova o cache compartilhado.")
 
 tabs = st.tabs([
     "🇧🇷 Presidente",
