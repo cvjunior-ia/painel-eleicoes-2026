@@ -80,8 +80,8 @@ st.markdown(
         display: block;
         font-family: "Arial Narrow", "Roboto Condensed", "Helvetica Neue Condensed", Arial, sans-serif;
         text-decoration: none !important;
-        border-radius: 20px;
-        margin: 10px 0 18px 0;
+        border-radius: 16px;
+        margin: 6px 0 12px 0;
         color: white !important;
         overflow: hidden;
         border: 1px solid rgba(255,255,255,0.14);
@@ -113,10 +113,10 @@ st.markdown(
         position: relative;
         z-index: 2;
         display: grid;
-        grid-template-columns: 1.55fr 0.75fr;
-        gap: 20px;
+        grid-template-columns: 1.75fr 0.65fr;
+        gap: 14px;
         align-items: center;
-        padding: 24px 26px;
+        padding: 15px 18px;
     }
 
     .motocred-badge {
@@ -124,49 +124,49 @@ st.markdown(
         font-family: Arial, Helvetica, sans-serif;
         background: rgba(255,255,255,0.16);
         border: 1px solid rgba(255,255,255,0.24);
-        padding: 5px 10px;
+        padding: 4px 8px;
         border-radius: 999px;
         font-size: 0.68rem;
         font-weight: 700;
         letter-spacing: 0.12em;
         text-transform: uppercase;
-        margin-bottom: 10px;
+        margin-bottom: 6px;
     }
 
     .motocred-brand {
         font-family: "Arial Narrow", "Roboto Condensed", "Helvetica Neue Condensed", Arial, sans-serif;
-        font-size: 2.20rem;
+        font-size: 1.72rem;
         font-weight: 900;
         line-height: 0.95;
         letter-spacing: 0.035em;
         text-transform: uppercase;
-        margin-bottom: 8px;
+        margin-bottom: 5px;
     }
 
     .motocred-headline {
         font-family: Arial, Helvetica, sans-serif;
-        font-size: 1.08rem;
+        font-size: 0.94rem;
         font-weight: 700;
-        line-height: 1.30;
+        line-height: 1.24;
         letter-spacing: -0.01em;
-        margin-bottom: 14px;
+        margin-bottom: 9px;
         max-width: 700px;
     }
 
     .motocred-benefits {
         display: flex;
         flex-wrap: wrap;
-        gap: 8px;
-        margin-bottom: 16px;
+        gap: 6px;
+        margin-bottom: 10px;
     }
 
     .motocred-benefit {
         font-family: Arial, Helvetica, sans-serif;
         background: rgba(255,255,255,0.12);
         border: 1px solid rgba(255,255,255,0.16);
-        padding: 7px 10px;
+        padding: 5px 8px;
         border-radius: 999px;
-        font-size: 0.80rem;
+        font-size: 0.72rem;
         font-weight: 700;
     }
 
@@ -176,18 +176,18 @@ st.markdown(
         letter-spacing: 0.01em;
         background: #ffffff;
         color: #003399 !important;
-        padding: 11px 17px;
-        border-radius: 11px;
+        padding: 8px 12px;
+        border-radius: 9px;
         font-weight: 900;
-        font-size: 0.92rem;
+        font-size: 0.82rem;
         box-shadow: 0 5px 12px rgba(0,0,0,0.14);
     }
 
     .motocred-side {
         background: rgba(255,255,255,0.13);
         border: 1px solid rgba(255,255,255,0.18);
-        border-radius: 16px;
-        padding: 17px 16px;
+        border-radius: 12px;
+        padding: 11px 12px;
         text-align: center;
         backdrop-filter: blur(4px);
     }
@@ -199,12 +199,12 @@ st.markdown(
         letter-spacing: 0.08em;
         opacity: 0.82;
         font-weight: 800;
-        margin-bottom: 7px;
+        margin-bottom: 4px;
     }
 
     .motocred-side-big {
         font-family: "Arial Narrow", "Roboto Condensed", "Helvetica Neue Condensed", Arial, sans-serif;
-        font-size: 1.42rem;
+        font-size: 1.05rem;
         font-weight: 900;
         line-height: 1.02;
         letter-spacing: 0.01em;
@@ -214,31 +214,31 @@ st.markdown(
 
     .motocred-side-copy {
         font-family: Arial, Helvetica, sans-serif;
-        font-size: 0.86rem;
-        line-height: 1.25;
+        font-size: 0.76rem;
+        line-height: 1.2;
         opacity: 0.95;
     }
 
     .motocred-disclaimer {
         font-size: 0.70rem;
         opacity: 0.72;
-        margin-top: -9px;
-        margin-bottom: 12px;
+        margin-top: -6px;
+        margin-bottom: 8px;
     }
 
     @media (max-width: 768px) {
         .motocred-wrap {
             grid-template-columns: 1fr;
-            padding: 17px 15px;
-            gap: 13px;
+            padding: 12px 12px;
+            gap: 9px;
         }
 
         .motocred-brand {
-            font-size: 1.62rem;
+            font-size: 1.35rem;
         }
 
         .motocred-headline {
-            font-size: 0.96rem;
+            font-size: 0.86rem;
         }
 
         .motocred-benefit {
@@ -247,7 +247,7 @@ st.markdown(
         }
 
         .motocred-side {
-            text-align: left;
+            display: none;
         }
     }
 
@@ -572,7 +572,7 @@ with c4:
 
 st.caption(
     "O painel consulta diretamente os arquivos JSON públicos do TSE. "
-    "Atualização automática a cada 15 minutos. Versão 1.7 — tipografia Yamaha-inspired, Yamaha Blue, atualização manual e interface móvel otimizada."
+    "Atualização automática a cada 15 minutos. Versão 1.8 — banner Yamaha Motocred compacto, tipografia Yamaha-inspired e interface móvel otimizada."
 )
 
 # Atualização manual com proteção contra cliques repetidos
