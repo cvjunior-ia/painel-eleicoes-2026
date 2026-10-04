@@ -85,9 +85,9 @@ st.markdown(
         overflow: hidden;
         border: 1px solid rgba(255,255,255,0.14);
         background:
-            radial-gradient(circle at 88% 16%, rgba(255,255,255,0.20), transparent 22%),
-            linear-gradient(135deg, #ed1c24 0%, #b30000 52%, #720000 100%);
-        box-shadow: 0 14px 34px rgba(0,0,0,0.20);
+            radial-gradient(circle at 88% 16%, rgba(255,255,255,0.22), transparent 22%),
+            linear-gradient(135deg, #0057B8 0%, #003399 52%, #001A70 100%);
+        box-shadow: 0 14px 34px rgba(0,35,110,0.28);
         position: relative;
     }
 
@@ -104,7 +104,7 @@ st.markdown(
 
     .motocred-ad:hover {
         transform: translateY(-2px);
-        box-shadow: 0 18px 40px rgba(0,0,0,0.26);
+        box-shadow: 0 18px 40px rgba(0,35,110,0.34);
         transition: 0.18s ease;
     }
 
@@ -166,7 +166,7 @@ st.markdown(
     .motocred-cta {
         display: inline-block;
         background: #ffffff;
-        color: #a40000 !important;
+        color: #003399 !important;
         padding: 11px 17px;
         border-radius: 11px;
         font-weight: 900;
@@ -558,7 +558,7 @@ with c4:
 
 st.caption(
     "O painel consulta diretamente os arquivos JSON públicos do TSE. "
-    "Atualização automática a cada 15 minutos. Versão 1.5 — banner Yamaha Motocred premium, atualização manual e interface móvel otimizada."
+    "Atualização automática a cada 15 minutos. Versão 1.6 — banner Yamaha Motocred em Yamaha Blue, atualização manual e interface móvel otimizada."
 )
 
 # Atualização manual com proteção contra cliques repetidos
