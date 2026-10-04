@@ -59,13 +59,19 @@ def get_json(url):
     r.raise_for_status()
     return r.json()
 
+def codigo_eleicao_arquivo(eleicao):
+    """O TSE usa o código da eleição com 6 dígitos no nome dos arquivos."""
+    return str(eleicao).zfill(6)
+
 def url_resultado(abrangencia, cargo, eleicao):
     a = abrangencia.lower()
-    return f"{BASE}/{eleicao}/dados/{a}/{a}-c{cargo}-e0{eleicao}-u.json"
+    e = codigo_eleicao_arquivo(eleicao)
+    return f"{BASE}/{eleicao}/dados/{a}/{a}-c{cargo}-e{e}-u.json"
 
 def url_acompanhamento(abrangencia, eleicao):
     a = abrangencia.lower()
-    return f"{BASE}/{eleicao}/dados/{a}/{a}-e0{eleicao}-ab.json"
+    e = codigo_eleicao_arquivo(eleicao)
+    return f"{BASE}/{eleicao}/dados/{a}/{a}-e{e}-ab.json"
 
 def safe_get(url):
     try:
@@ -75,67 +81,80 @@ def safe_get(url):
     except Exception as e:
         return None, str(e)
 
-def find_candidate_lists(obj):
-    found = []
-    if isinstance(obj, dict):
-        for k, v in obj.items():
-            kl = str(k).lower()
-            if kl in {"cand", "candidatos"} and isinstance(v, list):
-                found.append(v)
-            elif kl == "agr" and isinstance(v, list):
-                if v and isinstance(v[0], dict) and any(
-                    x in v[0] for x in ["sqcand","nm","n","vap","pvap"]
-                ):
-                    found.append(v)
-            found.extend(find_candidate_lists(v))
-    elif isinstance(obj, list):
-        for item in obj:
-            found.extend(find_candidate_lists(item))
-    return found
+def collect_candidates(node, out, party_hint=""):
+    """Percorre a estrutura TSE (carg > agr > par > cand) e coleta candidatos."""
+    if isinstance(node, list):
+        for item in node:
+            collect_candidates(item, out, party_hint)
+        return
+
+    if not isinstance(node, dict):
+        return
+
+    # Tenta carregar a sigla partidária do nível atual para os filhos.
+    hint = (
+        node.get("sg")
+        or node.get("sgp")
+        or node.get("sigla")
+        or party_hint
+        or ""
+    )
+
+    cand = node.get("cand")
+    if isinstance(cand, list):
+        for candidato in cand:
+            if isinstance(candidato, dict):
+                item = dict(candidato)
+                item["_party_hint"] = hint
+                out.append(item)
+
+    for k, v in node.items():
+        if k != "cand":
+            collect_candidates(v, out, hint)
+
 
 def parse_candidates(data):
     if not data:
         return pd.DataFrame()
 
     rows = []
-    if isinstance(data, dict):
-        cargos = data.get("carg")
-        if isinstance(cargos, list):
-            for bloco in cargos:
-                agr = bloco.get("agr", []) if isinstance(bloco, dict) else []
-                if isinstance(agr, list):
-                    for c in agr:
-                        if isinstance(c, dict):
-                            rows.append(c)
-
-    if not rows:
-        lists = find_candidate_lists(data)
-        if lists:
-            rows = max(lists, key=len)
+    collect_candidates(data, rows)
 
     out = []
     seen = set()
 
-    for c in rows:
-        if not isinstance(c, dict):
-            continue
-
-        nome = c.get("nm") or c.get("nome") or c.get("n") or "Não informado"
-        numero = c.get("n") or c.get("nr") or c.get("numero") or ""
-        partido = c.get("cc") or c.get("sg") or c.get("partido") or c.get("sgp") or ""
-        votos = c.get("vap")
+    for cand in rows:
+        nome = cand.get("nmu") or cand.get("nm") or cand.get("nome") or "Não informado"
+        numero = cand.get("n") or cand.get("nr") or cand.get("numero") or ""
+        partido = (
+            cand.get("cc")
+            or cand.get("sg")
+            or cand.get("sgp")
+            or cand.get("partido")
+            or cand.get("_party_hint")
+            or ""
+        )
+        votos = cand.get("vap")
         if votos is None:
-            votos = c.get("votos")
-        pct = c.get("pvap")
+            votos = cand.get("votos")
+
+        pct = cand.get("pvap")
         if pct is None:
-            pct = c.get("percentual")
+            pct = cand.get("pvapn")
+        if pct is None:
+            pct = cand.get("percentual")
 
-        status = c.get("st") or c.get("sit") or c.get("dvt") or c.get("situacao") or ""
-        eleito = c.get("e")
-        if eleito and not status:
-            status = str(eleito)
+        status = (
+            cand.get("st")
+            or cand.get("sit")
+            or cand.get("dvt")
+            or cand.get("situacao")
+            or ""
+        )
+        if not status and cand.get("e") == "s":
+            status = "Eleito"
 
-        seq = c.get("sqcand") or c.get("seq") or c.get("sequencial") or ""
+        seq = cand.get("sqcand") or cand.get("seq") or cand.get("sequencial") or ""
         key = (str(seq), str(nome), str(numero))
         if key in seen:
             continue
@@ -155,6 +174,7 @@ def parse_candidates(data):
     if not df.empty:
         df = df.sort_values(["Votos", "% válidos"], ascending=False).reset_index(drop=True)
     return df
+
 
 def parse_totalizacao(data):
     if not isinstance(data, dict):
@@ -268,7 +288,7 @@ with c3:
 
 st.caption(
     "O painel consulta diretamente os arquivos JSON públicos do TSE. "
-    "Antes da abertura da divulgação oficial, alguns arquivos podem ainda não existir."
+    "Atualização automática a cada 15 minutos. Versão 1.1 — endpoints oficiais 2026 corrigidos."
 )
 
 tabs = st.tabs([
@@ -303,6 +323,8 @@ with tabs[0]:
             diagnostico.append((rotulo + " acompanhamento", uac, err2))
 
             df = parse_candidates(data)
+            tot = parse_totalizacao(data).get("percentual", 0.0)
+        if tot <= 0:
             tot = parse_totalizacao(acomp).get("percentual", 0.0)
 
             st.markdown(f"### {rotulo}")
@@ -338,7 +360,9 @@ with tabs[1]:
         diagnostico.append((f"Acompanhamento {uf}", uac, err2))
 
         df = parse_candidates(data)
-        tot = parse_totalizacao(acomp).get("percentual", 0.0)
+        tot = parse_totalizacao(data).get("percentual", 0.0)
+        if tot <= 0:
+            tot = parse_totalizacao(acomp).get("percentual", 0.0)
         ds = status_senado(df, tot)
 
         if len(ds) >= 1:
@@ -364,7 +388,9 @@ with tabs[1]:
     data, _ = safe_get(url_resultado(uf_sel, "0005", ELEICAO_ESTADUAL))
     acomp, _ = safe_get(url_acompanhamento(uf_sel, ELEICAO_ESTADUAL))
     df = parse_candidates(data)
-    tot = parse_totalizacao(acomp).get("percentual", 0.0)
+    tot = parse_totalizacao(data).get("percentual", 0.0)
+    if tot <= 0:
+        tot = parse_totalizacao(acomp).get("percentual", 0.0)
     ds = status_senado(df, tot)
 
     st.progress(min(max(tot / 100, 0.0), 1.0), text=f"Seções totalizadas: {tot:.2f}%")
@@ -394,7 +420,9 @@ with tabs[2]:
     diagnostico.append((f"Acompanhamento DFed {uf_df}", url_acompanhamento(uf_df, ELEICAO_ESTADUAL), err2))
 
     df = parse_candidates(data)
-    tot = parse_totalizacao(acomp).get("percentual", 0.0)
+    tot = parse_totalizacao(data).get("percentual", 0.0)
+    if tot <= 0:
+        tot = parse_totalizacao(acomp).get("percentual", 0.0)
 
     st.progress(min(max(tot / 100, 0.0), 1.0), text=f"Seções totalizadas: {tot:.2f}%")
 
@@ -420,7 +448,9 @@ with tabs[3]:
     diagnostico.append(("Acompanhamento ALBA", url_acompanhamento("BA", ELEICAO_ESTADUAL), err2))
 
     df = parse_candidates(data)
-    tot = parse_totalizacao(acomp).get("percentual", 0.0)
+    tot = parse_totalizacao(data).get("percentual", 0.0)
+    if tot <= 0:
+        tot = parse_totalizacao(acomp).get("percentual", 0.0)
 
     st.progress(min(max(tot / 100, 0.0), 1.0), text=f"Seções totalizadas: {tot:.2f}%")
 
