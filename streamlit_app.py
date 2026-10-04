@@ -79,65 +79,164 @@ st.markdown(
     .motocred-ad {
         display: block;
         text-decoration: none !important;
-        border-radius: 14px;
-        padding: 18px 22px;
-        margin: 8px 0 16px 0;
-        background: linear-gradient(135deg, #d90000 0%, #a80000 100%);
+        border-radius: 20px;
+        margin: 10px 0 18px 0;
         color: white !important;
-        box-shadow: 0 4px 14px rgba(0,0,0,0.12);
+        overflow: hidden;
+        border: 1px solid rgba(255,255,255,0.14);
+        background:
+            radial-gradient(circle at 88% 16%, rgba(255,255,255,0.20), transparent 22%),
+            linear-gradient(135deg, #ed1c24 0%, #b30000 52%, #720000 100%);
+        box-shadow: 0 14px 34px rgba(0,0,0,0.20);
+        position: relative;
     }
+
+    .motocred-ad:before {
+        content: "";
+        position: absolute;
+        right: -55px;
+        bottom: -90px;
+        width: 260px;
+        height: 260px;
+        border-radius: 50%;
+        background: rgba(255,255,255,0.07);
+    }
+
     .motocred-ad:hover {
-        filter: brightness(1.03);
-        transform: translateY(-1px);
-        transition: 0.15s ease;
+        transform: translateY(-2px);
+        box-shadow: 0 18px 40px rgba(0,0,0,0.26);
+        transition: 0.18s ease;
     }
-    .motocred-ad .ad-label {
-        font-size: 0.72rem;
-        text-transform: uppercase;
-        letter-spacing: 0.08em;
-        opacity: 0.85;
-        margin-bottom: 4px;
+
+    .motocred-wrap {
+        position: relative;
+        z-index: 2;
+        display: grid;
+        grid-template-columns: 1.55fr 0.75fr;
+        gap: 20px;
+        align-items: center;
+        padding: 24px 26px;
     }
-    .motocred-ad .brand {
-        font-size: 1.55rem;
-        font-weight: 800;
-        line-height: 1.05;
-        margin-bottom: 4px;
-    }
-    .motocred-ad .copy {
-        font-size: 0.95rem;
-        line-height: 1.3;
-        margin-bottom: 10px;
-        opacity: 0.98;
-    }
-    .motocred-ad .cta {
+
+    .motocred-badge {
         display: inline-block;
-        background: white;
-        color: #a80000 !important;
-        font-weight: 700;
-        padding: 7px 12px;
-        border-radius: 8px;
-        font-size: 0.88rem;
-    }
-    .motocred-disclaimer {
-        font-size: 0.72rem;
-        opacity: 0.7;
-        margin-top: -10px;
+        background: rgba(255,255,255,0.16);
+        border: 1px solid rgba(255,255,255,0.24);
+        padding: 5px 10px;
+        border-radius: 999px;
+        font-size: 0.70rem;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
         margin-bottom: 10px;
     }
 
+    .motocred-brand {
+        font-size: 2.15rem;
+        font-weight: 950;
+        line-height: 1;
+        letter-spacing: -0.035em;
+        margin-bottom: 8px;
+    }
+
+    .motocred-headline {
+        font-size: 1.12rem;
+        font-weight: 750;
+        line-height: 1.25;
+        margin-bottom: 14px;
+        max-width: 700px;
+    }
+
+    .motocred-benefits {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-bottom: 16px;
+    }
+
+    .motocred-benefit {
+        background: rgba(255,255,255,0.12);
+        border: 1px solid rgba(255,255,255,0.16);
+        padding: 7px 10px;
+        border-radius: 999px;
+        font-size: 0.80rem;
+        font-weight: 700;
+    }
+
+    .motocred-cta {
+        display: inline-block;
+        background: #ffffff;
+        color: #a40000 !important;
+        padding: 11px 17px;
+        border-radius: 11px;
+        font-weight: 900;
+        font-size: 0.92rem;
+        box-shadow: 0 5px 12px rgba(0,0,0,0.14);
+    }
+
+    .motocred-side {
+        background: rgba(255,255,255,0.13);
+        border: 1px solid rgba(255,255,255,0.18);
+        border-radius: 16px;
+        padding: 17px 16px;
+        text-align: center;
+        backdrop-filter: blur(4px);
+    }
+
+    .motocred-side-small {
+        font-size: 0.72rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        opacity: 0.82;
+        font-weight: 800;
+        margin-bottom: 7px;
+    }
+
+    .motocred-side-big {
+        font-size: 1.35rem;
+        font-weight: 950;
+        line-height: 1.05;
+        margin-bottom: 7px;
+    }
+
+    .motocred-side-copy {
+        font-size: 0.86rem;
+        line-height: 1.25;
+        opacity: 0.95;
+    }
+
+    .motocred-disclaimer {
+        font-size: 0.70rem;
+        opacity: 0.72;
+        margin-top: -9px;
+        margin-bottom: 12px;
+    }
+
     @media (max-width: 768px) {
-        .motocred-ad {
-            padding: 14px 15px;
-            border-radius: 12px;
+        .motocred-wrap {
+            grid-template-columns: 1fr;
+            padding: 17px 15px;
+            gap: 13px;
         }
-        .motocred-ad .brand {
-            font-size: 1.28rem;
+
+        .motocred-brand {
+            font-size: 1.62rem;
         }
-        .motocred-ad .copy {
-            font-size: 0.88rem;
+
+        .motocred-headline {
+            font-size: 0.96rem;
+        }
+
+        .motocred-benefit {
+            font-size: 0.74rem;
+            padding: 6px 9px;
+        }
+
+        .motocred-side {
+            text-align: left;
         }
     }
+
     </style>
     """,
     unsafe_allow_html=True,
@@ -416,10 +515,29 @@ st.markdown(
        href="https://motocredyamaha.com.br/"
        target="_blank"
        rel="noopener noreferrer">
-        <div class="ad-label">Publicidade</div>
-        <div class="brand">YAMAHA MOTOCRED</div>
-        <div class="copy">Motos Yamaha, peças, acessórios, serviços e ofertas. Conheça nossas opções e fale com a equipe Motocred.</div>
-        <span class="cta">Conheça a Yamaha Motocred →</span>
+        <div class="motocred-wrap">
+            <div>
+                <div class="motocred-badge">Publicidade</div>
+                <div class="motocred-brand">YAMAHA MOTOCRED</div>
+                <div class="motocred-headline">
+                    Sua Yamaha no Recôncavo: motos, peças, acessórios e oficina especializada.
+                </div>
+                <div class="motocred-benefits">
+                    <span class="motocred-benefit">🏍️ Motos Yamaha</span>
+                    <span class="motocred-benefit">🔧 Peças e acessórios</span>
+                    <span class="motocred-benefit">🛠️ Oficina especializada</span>
+                    <span class="motocred-benefit">💬 Atendimento rápido</span>
+                </div>
+                <span class="motocred-cta">Ver ofertas e conhecer a Motocred →</span>
+            </div>
+            <div class="motocred-side">
+                <div class="motocred-side-small">Destaque Yamaha</div>
+                <div class="motocred-side-big">Escolha sua próxima Yamaha</div>
+                <div class="motocred-side-copy">
+                    Clique e confira modelos, serviços e novidades no site da Motocred.
+                </div>
+            </div>
+        </div>
     </a>
     <div class="motocred-disclaimer">
         Conteúdo comercial da Yamaha Motocred. Não possui vínculo com o TSE.
@@ -440,7 +558,7 @@ with c4:
 
 st.caption(
     "O painel consulta diretamente os arquivos JSON públicos do TSE. "
-    "Atualização automática a cada 15 minutos. Versão 1.4 — banner Yamaha Motocred, atualização manual e interface móvel otimizada."
+    "Atualização automática a cada 15 minutos. Versão 1.5 — banner Yamaha Motocred premium, atualização manual e interface móvel otimizada."
 )
 
 # Atualização manual com proteção contra cliques repetidos
