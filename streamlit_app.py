@@ -324,8 +324,8 @@ with tabs[0]:
 
             df = parse_candidates(data)
             tot = parse_totalizacao(data).get("percentual", 0.0)
-        if tot <= 0:
-            tot = parse_totalizacao(acomp).get("percentual", 0.0)
+            if tot <= 0:
+                tot = parse_totalizacao(acomp).get("percentual", 0.0)
 
             st.markdown(f"### {rotulo}")
             st.progress(min(max(tot / 100, 0.0), 1.0), text=f"Seções totalizadas: {tot:.2f}%")
